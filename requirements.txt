@@ -1,0 +1,13 @@
+torch
+transformers>=4.44
+accelerate
+bitsandbytes>=0.46.1
+sentence-transformers
+faiss-cpu
+datasets
+numpy
+tqdm
+sentencepiece
+protobuf
+requests
+mwparserfromhell

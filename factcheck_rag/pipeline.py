@@ -1,8 +1,8 @@
 
 import time
-from retriever import Retriever
-from generator import Generator
-import config
+from factcheck_rag.retrieval.retriever import Retriever
+from factcheck_rag.generation.generator import Generator
+from factcheck_rag import config
 
 class RAGPipeline:
     def __init__(self):
