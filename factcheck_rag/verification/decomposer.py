@@ -20,6 +20,36 @@ _CITE_RE      = re.compile(r"\[(\d+)\]")
 _SENT_SPLIT   = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(\[])")
 _LEADING_CITE = re.compile(r"^((?:\s*(?:,|and)?\s*\[\d+\])+)[\s.,;]*")
 
+# a period after these does not end a sentence ("St. Louis", "Dr. Who")
+_ABBREVIATIONS = {
+    "st", "mt", "ft", "mr", "mrs", "ms", "dr", "jr", "sr", "prof", "gen", "col",
+    "lt", "sgt", "capt", "gov", "sen", "rep", "rev", "no", "vs", "etc", "inc",
+    "ltd", "co", "corp", "dept", "est", "approx", "jan", "feb", "mar", "apr",
+    "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "e.g", "i.e",
+}
+# "Based on the information provided, X" -> "X": these lead-ins made the
+# decomposer return NONE for sentences that do contain facts
+_META_LEADIN = re.compile(
+    r"^(?:based on|according to|from)\s+(?:the\s+)?(?:provided\s+|given\s+|available\s+)?"
+    r"(?:information|search results|passages|results|texts|sources|documents|data)"
+    r"(?:\s+provided|\s+given)?\s*,\s*", re.I)
+
+
+def _ends_with_abbreviation(text: str) -> bool:
+    if not text.endswith("."):
+        return False
+    token = text.split()[-1][:-1]                       # last word without its final "."
+    if token.lower() in _ABBREVIATIONS:
+        return True
+    if re.fullmatch(r"[A-Z]", token):                   # initial: "J. K. Rowling"
+        return True
+    return bool(re.fullmatch(r"(?:[A-Za-z]\.)+[A-Za-z]", token))   # "U.S", "U.K"
+
+
+def drop_meta_leadin(sentence: str) -> str:
+    out = _META_LEADIN.sub("", sentence, count=1)
+    return out[:1].upper() + out[1:] if out != sentence else sentence
+
 _SYSTEM = (
     "You split ONE sentence of an answer into atomic factual claims.\n"
     "Rules:\n"
@@ -69,8 +99,14 @@ def split_sentences(answer: str) -> list:
         chunk = chunk.strip().lstrip("-*• ").strip()
         if not chunk:
             continue
-        for sent in _SENT_SPLIT.split(chunk):
-            sent = sent.strip()
+        parts = []
+        for part in _SENT_SPLIT.split(chunk):
+            part = part.strip()
+            if parts and _ends_with_abbreviation(parts[-1]):
+                parts[-1] = parts[-1] + " " + part          # "St." + "Louis ..."
+            else:
+                parts.append(part)
+        for sent in parts:
             m = _LEADING_CITE.match(sent)
             if m and sentences:
                 sentences[-1] = sentences[-1] + " " + m.group(1).strip()
@@ -108,7 +144,7 @@ class ClaimDecomposer:
         user = (
             f"Question: {question}\n"
             f"Previous sentences: {context}\n"
-            f"Sentence: {strip_citations(sentence)}\n"
+            f"Sentence: {drop_meta_leadin(strip_citations(sentence))}\n"
             f"Claims:"
         )
         raw = self._gen.chat(_SYSTEM, user, max_new_tokens=config.DECOMP_MAX_TOKENS)

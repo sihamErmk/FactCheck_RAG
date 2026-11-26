@@ -39,3 +39,10 @@ NLI_MAX_LENGTH  = 512            # DeBERTa max input tokens (premise is truncate
 NLI_BATCH       = 8
 
 JUDGE_MAX_TOKENS = 160          # room for "Quote: ..." + "Verdict: ..."
+
+# ---- Phase 3: repair loop ----
+REPAIR_MAX_ROUNDS   = 3          # T: stop after this many repair rounds
+REPAIR_TOP_K        = 3          # passages retrieved per sub-query
+SUBQUERY_MAX_TOKENS = 32
+REWRITE_MAX_TOKENS  = 200
+REWRITE_MAX_EVIDENCE = 8         # max passages shown to the rewriter for one sentence

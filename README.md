@@ -65,8 +65,9 @@ FactCheck_RAG/
 │   ├── pipeline.py             # standard RAG: retriever + generator         (Phase 1)
 │   ├── retrieval/              # indexer.py, retriever.py                    (Phase 1)
 │   ├── generation/             # generator.py                                (Phase 1)
-│   └── verification/           # decomposer.py, verifier.py, factchecker.py  (Phase 2)
-├── scripts/                    # what you run: build_index, run_baseline, run_verify
+│   ├── verification/           # decomposer.py, verifier.py, factchecker.py  (Phase 2)
+│   └── repair/                 # subquery.py, rewriter.py, loop.py           (Phase 3)
+├── scripts/                    # what you run: build_index, run_baseline, run_verify, run_factcheck
 ├── tests/                      # unit tests, no GPU needed
 ├── notebooks/
 │   └── colab_runner.ipynb      # runs everything on Colab
@@ -76,9 +77,9 @@ FactCheck_RAG/
 
 `data/` (index) and `outputs/` (results) are created when you run the
 scripts and are not in git. A new folder is added to `factcheck_rag/` when
-its phase starts (e.g. `repair/` for Phase 3).
+its phase starts (e.g. `evaluation/` for Phase 4).
 
-Run the unit tests (no GPU needed): `python tests/test_text_parsing.py`
+Run the unit tests (no GPU needed): `python tests/test_text_parsing.py` and `python tests/test_repair_loop.py`
 
 **On Colab:** open `notebooks/colab_runner.ipynb` (*File → Upload notebook* or *Open from GitHub*). It clones this repo, links `data/` and `outputs/` to `MyDrive/factcheck_rag/` so the index and results persist, and runs every step.
 
@@ -254,14 +255,84 @@ python scripts/run_verify.py --verifier judge  # -> outputs/verified_judge.jsonl
 
 ---
 
+## Phase 3 — Repair loop ✅
+
+### What was built
+
+```
+factcheck_rag/repair/
+├── subquery.py      # LLM writes one short search query per unsupported claim
+├── rewriter.py      # LLM rewrites ONE sentence: fix or delete its unsupported facts
+└── loop.py          # RepairLoop (repair a draft) and FactCheckRAG (end to end)
+scripts/run_factcheck.py   # repair the baseline drafts, report Claim P per round
+```
+
+### How it works
+
+```
+round 0   decompose the draft + verify every claim            (Phase 2)
+round t   for each sentence holding unsupported claims:
+            for each unsupported claim:
+              sub-query  -> retrieve top-3 new passages
+              new passages are appended: [1..5] original, [6..] new
+            rewrite ONLY that sentence with the new evidence
+              (fix the fact, or delete it if the evidence says nothing)
+            re-decompose + re-verify ONLY that sentence
+stop      when every claim is supported, or after T = 3 rounds
+```
+
+- Sentences without unsupported claims are kept verbatim.
+- Safeguards (found when testing on Colab): a rewrite is **rejected** if the
+  sentence loses supported facts (Qwen sometimes changes a correct fact), and
+  a sentence the rewriter returns **unchanged** is not retried in later rounds.
+- Each sub-query brings up to 3 passages that are not already in the answer.
+- FactCheck-RAG starts from the same drafts and passages as standard RAG
+  (`outputs/baseline.jsonl`), so the comparison isolates the repair loop.
+- One snapshot is stored per round. Since rounds are sequential, the
+  snapshot after round t is the output of a run with T = t, so a single
+  T = 3 run also gives the T = 1 and T = 2 results (Phase 5 ablation).
+- Each output line keeps the draft, the final answer, every sub-query and
+  rewrite, the claims, the number of rounds and the latency.
+
+### How to run
+
+```bash
+python scripts/run_factcheck.py --verifier nli   --limit 5   # -> outputs/factcheck_nli.jsonl
+python scripts/run_factcheck.py --verifier judge --limit 5   # -> outputs/factcheck_judge.jsonl
+```
+
+### Phase 3 results (first 20 ASQA dev questions, same drafts as standard RAG)
+
+| Verifier | Claim P before → after | T = 1 | T = 2 | T = 3 | Latency / question | Rewrites applied |
+|---|---|---|---|---|---|---|
+| NLI | 0.922 → 0.978 | 0.978 | 0.978 | 0.978 | 12.0 s | 1 of 3 attempts |
+| LLM judge | 0.859 → 0.959 | 0.959 | 0.959 | 0.959 | 22.6 s | 4 of 6 attempts |
+
+Standard RAG alone takes ~6 s per question.
+
+- The whole gain comes from round 1; rounds 2 and 3 add nothing on this sample.
+- The stricter judge triggers twice as many repairs, at about 3x the cost.
+- Repairs seen: wrong citations fixed (`[2]` → `[2][5]`), invented
+  conclusions deleted ("all 28 states were under Congress"), unsupported
+  details removed ("fifth Finals win in eleven seasons").
+- Bad rewrites are now rejected (e.g. Qwen turned "after the 2004
+  amalgamation" into "prior to"), keeping the original sentence.
+- Trade-off: faithfulness to the retrieved passages can remove a true fact
+  the passages do not state (Dua Lipa at the 2018 final, judge run). Phase 4
+  measures this with Str-EM.
+- Known limitation: the decomposer still returns no claim for some
+  sentences (e.g. the Congress answer); checked by hand in Phase 5.
+
+---
+
 ## Phases Overview
 
 | Phase | Description | Status |
 |---|---|---|
 | 1 | Baseline RAG pipeline | ✅ Done |
 | 2 | Claim decomposer + verifiers | ✅ Done |
-| 3 | Repair loop | 🔄 Next |
-| 4 | Evaluation on 200 ASQA questions | ⏳ Pending |
+| 3 | Repair loop | ✅ Done |
+| 4 | Evaluation on 200 ASQA questions | 🔄 Next |
 | 5 | Ablations and manual validation | ⏳ Pending |
 
 ---

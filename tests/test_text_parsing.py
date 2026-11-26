@@ -3,7 +3,8 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from factcheck_rag.verification.decomposer import (
-    ClaimDecomposer, extract_citations, parse_claims, split_sentences, strip_citations)
+    ClaimDecomposer, drop_meta_leadin, extract_citations, parse_claims, split_sentences,
+    strip_citations)
 from factcheck_rag.verification.factchecker import ClaimChecker
 from factcheck_rag.verification.verifier import parse_judgement
 
@@ -21,6 +22,21 @@ def test_split_and_strip():
     assert s[0] == "Armstrong walked first [1]."
     assert extract_citations(s[1]) == [2, 3]
     assert strip_citations(s[0]) == "Armstrong walked first."
+
+
+def test_split_ignores_abbreviations():
+    # seen on Colab: "St." was cut, giving "Louis in 1995, becoming the St."
+    a = ("The Rams moved to St. Louis in 1995, becoming the St. Louis Rams [1]. "
+         "J. K. Rowling lived in the U.S. in Jan. 1990 [2].")
+    assert split_sentences(a) == [
+        "The Rams moved to St. Louis in 1995, becoming the St. Louis Rams [1].",
+        "J. K. Rowling lived in the U.S. in Jan. 1990 [2]."]
+
+
+def test_drop_meta_leadin():
+    assert drop_meta_leadin("Based on the information provided, the INC ran every state.") ==         "The INC ran every state."
+    assert drop_meta_leadin("According to the search results, Ronaldo leads.") == "Ronaldo leads."
+    assert drop_meta_leadin("From 1990, he played.") == "From 1990, he played."
 
 
 def test_parse_claims():
