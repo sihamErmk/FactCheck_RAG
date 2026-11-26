@@ -1,4 +1,4 @@
-"""GPU-free tests for the Phase 3 repair loop: python -m pytest tests  (or python tests/test_repair.py)"""
+"""GPU-free unit tests: python -m pytest tests  (or python tests/test_repair.py)"""
 import os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -108,7 +108,7 @@ def test_none_drops_claim_and_empty_answer_falls_back():
     assert (res["rounds"], res["n_dropped"]) == (1, 1)
 
 
-def test_stops_after_max_rounds_and_never_repeats_a_query_silently():
+def test_stops_after_max_rounds_and_passes_tried_queries():
     res, gen, _ = _run("A stubborn fact [1].", [_claim(0, "A stubborn fact.", 0, [1], False)],
                        max_rounds=3)
     c = res["claims"][0]
