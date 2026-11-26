@@ -59,15 +59,16 @@ def main():
     with open(out, encoding="utf-8") as f:
         rows = [json.loads(l) for l in f if l.strip()]
     reps = [r["repair"] for r in rows]
-    n = lambda key: sum(r[key] for r in reps)
-    total_claims = n("n_kept") + n("n_repaired") + n("n_dropped")
+    n_kept = sum(r["n_kept"] for r in reps)
+    n_repaired = sum(r["n_repaired"] for r in reps)
+    n_dropped = sum(r["n_dropped"] for r in reps)
     touched = [r for r in reps if r["rounds"]]
     # end-to-end seconds per question: baseline RAG + decompose + verify + repair
     totals = [r["latency_s"] + r["check"]["decompose_s"] + r["check"]["verify_s"]
               + r["repair"]["repair_s"] for r in rows]
     print(f"\nQuestions          : {len(reps)}  ({len(touched)} needed repair)")
-    print(f"Claims             : {total_claims}  kept {n('n_kept')}, "
-          f"repaired {n('n_repaired')}, dropped {n('n_dropped')}")
+    print(f"Claims             : {n_kept + n_repaired + n_dropped}  kept {n_kept}, "
+          f"repaired {n_repaired}, dropped {n_dropped}")
     if touched:
         print(f"Rounds used        : {mean(r['rounds'] for r in touched):.2f}  "
               f"(mean over answers that needed repair)")

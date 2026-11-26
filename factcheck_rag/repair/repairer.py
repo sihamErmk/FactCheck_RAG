@@ -168,14 +168,14 @@ class Repairer:
             if c["status"] == "open":                 # still unsupported after the last round
                 c["status"] = "dropped"
 
-        count = lambda s: sum(c["status"] == s for c in claims)
+        statuses = [c["status"] for c in claims]
         return {
             "answer":     rebuild_answer(answer, claims),
             "passages":   passages,
             "claims":     claims,
             "rounds":     rounds,
-            "n_kept":     count("kept"),
-            "n_repaired": count("repaired"),
-            "n_dropped":  count("dropped"),
+            "n_kept":     statuses.count("kept"),
+            "n_repaired": statuses.count("repaired"),
+            "n_dropped":  statuses.count("dropped"),
             "repair_s":   round(time.perf_counter() - t0, 3),
         }
