@@ -4,10 +4,11 @@
     python scripts/run_repair.py --verifier judge --limit 20
     python scripts/run_repair.py --verifier nli --max-rounds 1    # rounds ablation
 
-Reads outputs/verified_<verifier>.jsonl, writes outputs/repaired_<verifier>_T<rounds>.jsonl
-(resumable). Each row gets a "repair" dict: the repaired answer, the extended
-passage list (citations index into it), every claim with its status
-(kept / repaired / dropped) and per-round history, and the rounds used.
+Reads outputs/verified_<verifier>.jsonl and writes
+outputs/repaired_<verifier>_T<rounds>.jsonl (resumable). Each row gets a
+"repair" dict: the repaired answer, the extended passage list (citations
+index into it), every claim with its status (kept / repaired / dropped) and
+per-round history, and the rounds used.
 """
 import argparse, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root
@@ -29,7 +30,8 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--limit", type=int, default=None)
     args = ap.parse_args()
-    inp = args.input or os.path.join(config.RESULTS_DIR, f"verified_{args.verifier}.jsonl")
+    inp = args.input or os.path.join(
+        config.RESULTS_DIR, f"verified_{args.verifier}.jsonl")
     out = args.out or os.path.join(
         config.RESULTS_DIR, f"repaired_{args.verifier}_T{args.max_rounds}.jsonl")
 
@@ -72,7 +74,8 @@ def main():
     if touched:
         print(f"Rounds used        : {mean(r['rounds'] for r in touched):.2f}  "
               f"(mean over answers that needed repair)")
-        print(f"Repair time        : {mean(r['repair_s'] for r in touched):.1f} s  (same answers)")
+        print(f"Repair time        : {mean(r['repair_s'] for r in touched):.1f} s  "
+              f"(same answers)")
     if totals:
         print(f"End-to-end latency : {mean(totals):.1f} s per question")
     print(f"Saved to {out}")
