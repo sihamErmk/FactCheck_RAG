@@ -65,8 +65,9 @@ FactCheck_RAG/
 │   ├── pipeline.py             # standard RAG: retriever + generator         (Phase 1)
 │   ├── retrieval/              # indexer.py, retriever.py                    (Phase 1)
 │   ├── generation/             # generator.py                                (Phase 1)
-│   └── verification/           # decomposer.py, verifier.py, factchecker.py  (Phase 2)
-├── scripts/                    # what you run: build_index, run_baseline, run_verify
+│   ├── verification/           # decomposer.py, verifier.py, factchecker.py  (Phase 2)
+│   └── repair/                 # repairer.py: sub-query, re-retrieve, rewrite (Phase 3)
+├── scripts/                    # what you run: build_index, run_baseline, run_verify, run_repair
 ├── tests/                      # unit tests, no GPU needed
 ├── notebooks/
 │   └── colab_runner.ipynb      # runs everything on Colab
@@ -76,9 +77,9 @@ FactCheck_RAG/
 
 `data/` (index) and `outputs/` (results) are created when you run the
 scripts and are not in git. A new folder is added to `factcheck_rag/` when
-its phase starts (e.g. `repair/` for Phase 3).
+its phase starts.
 
-Run the unit tests (no GPU needed): `python tests/test_text_parsing.py`
+Run the unit tests (no GPU needed): `python tests/test_text_parsing.py` and `python tests/test_repair.py`
 
 **On Colab:** open `notebooks/colab_runner.ipynb` (*File → Upload notebook* or *Open from GitHub*). It clones this repo, links `data/` and `outputs/` to `MyDrive/factcheck_rag/` so the index and results persist, and runs every step.
 
@@ -254,14 +255,69 @@ python scripts/run_verify.py --verifier judge  # -> outputs/verified_judge.jsonl
 
 ---
 
+## Phase 3 — Repair loop 🔄
+
+### What was built
+
+```
+factcheck_rag/repair/
+└── repairer.py      # Repairer: sub-query -> retrieve -> rewrite -> verify, max T rounds
+scripts/run_repair.py  # repair the answers checked by run_verify.py
+tests/test_repair.py   # GPU-free tests with a fake LLM, retriever and verifier
+```
+
+It reuses the loaded Qwen (sub-queries and rewrites), the Phase 1 retriever,
+and `ClaimChecker.verify_claims` (same evidence rule and verifier as Phase 2).
+
+### How it works
+
+```
+For each round r = 1 .. T (T = config.MAX_ROUNDS = 3):
+    for each claim still unsupported:
+        Qwen writes one short sub-query for that claim
+          (it sees the queries already tried for it, so it does not repeat them)
+        Retrieve top-5 passages; new ones are appended to the answer's passage
+          list, so [n] keeps meaning passages[n-1]
+        Qwen rewrites ONLY that claim from those passages:
+          unchanged if they state it, corrected if they state another fact,
+          NONE if they say nothing -> claim dropped
+        Verify the rewritten claim against the passages it cites
+    stop early when no claim is left to repair
+
+Claims still unsupported after round T are dropped.
+Final answer: sentences whose claims were all supported are kept word for
+word; any other sentence is replaced by its surviving claims, each with its
+own citations. Nothing left -> "The search results do not contain enough
+information to answer the question."
+
+Output per answer: answer, passages (extended), claims[] with status
+kept / repaired / dropped and per-round history, rounds, n_kept,
+n_repaired, n_dropped, repair_s
+```
+
+> For Phase 4: the loop only keeps claims its verifier accepted, so the
+> final answer's claim precision is 1.0 by construction under that same
+> verifier. Measure it with the other verifier, the ALCE citation metrics or
+> the manual check, and report `n_dropped` next to it.
+
+### How to run
+
+```bash
+python scripts/run_repair.py --verifier nli                 # -> outputs/repaired_nli_T3.jsonl
+python scripts/run_repair.py --verifier judge               # -> outputs/repaired_judge_T3.jsonl
+python scripts/run_repair.py --verifier nli --max-rounds 1  # rounds ablation (Phase 5)
+```
+
+---
+
 ## Phases Overview
 
 | Phase | Description | Status |
 |---|---|---|
 | 1 | Baseline RAG pipeline | ✅ Done |
 | 2 | Claim decomposer + verifiers | ✅ Done |
-| 3 | Repair loop | 🔄 Next |
-| 4 | Evaluation on 200 ASQA questions | ⏳ Pending |
+| 3 | Repair loop | 🔄 Code + unit tests done, first GPU run pending |
+| 4 | Evaluation on 200 ASQA questions | 🔄 Next |
 | 5 | Ablations and manual validation | ⏳ Pending |
 
 ---
