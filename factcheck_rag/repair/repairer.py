@@ -37,13 +37,15 @@ _REWRITE_SYSTEM = (
 )
 
 # answer used when every claim was dropped
-NO_ANSWER = "The search results do not contain enough information to answer the question."
+NO_ANSWER = ("The search results do not contain enough information "
+             "to answer the question.")
 
 
 def parse_subquery(raw: str, fallback: str) -> str:
     """First non-empty line, without a 'Query:' label or quotes."""
     for line in raw.splitlines():
-        line = re.sub(r"^query:\s*", "", line.strip(), flags=re.I).strip().strip("\"'").strip()
+        line = re.sub(r"^query:\s*", "", line.strip(), flags=re.I)
+        line = line.strip().strip("\"'").strip()
         if line:
             return line
     return fallback
@@ -106,10 +108,11 @@ def rebuild_answer(answer: str, claims: list) -> str:
 
 
 class Repairer:
-    def __init__(self, generator, retriever, checker, max_rounds: int = config.MAX_ROUNDS):
+    def __init__(self, generator, retriever, checker,
+                 max_rounds: int = config.MAX_ROUNDS):
         self._gen = generator              # the loaded Qwen, shared with Phase 2
         self._retriever = retriever
-        self._checker = checker            # ClaimChecker: same evidence rule and verifier as Phase 2
+        self._checker = checker            # ClaimChecker from Phase 2
         self.max_rounds = max_rounds
 
     def _subquery(self, question: str, claim: dict) -> str:
@@ -118,18 +121,20 @@ class Repairer:
                 f"Claim: {claim['text']}\n"
                 f"Already tried: {tried}\n"
                 f"Query:")
-        raw = self._gen.chat(_SUBQUERY_SYSTEM, user, max_new_tokens=config.SUBQUERY_MAX_TOKENS)
+        raw = self._gen.chat(_SUBQUERY_SYSTEM, user,
+                             max_new_tokens=config.SUBQUERY_MAX_TOKENS)
         return parse_subquery(raw, fallback=claim["text"])
 
     def _rewrite(self, question: str, claim: dict, passages: list, shown: list):
         block = "\n\n".join(
-            f"[{n}] (Title: {passages[n - 1].get('title', '')}) {passages[n - 1]['text']}"
+            f"[{n}] (Title: {passages[n-1].get('title','')}) {passages[n-1]['text']}"
             for n in shown)
         user = (f"Question: {question}\n"
                 f"Claim: {claim['text']}\n\n"
                 f"Passages:\n{block}\n\n"
                 f"Fixed claim:")
-        raw = self._gen.chat(_REWRITE_SYSTEM, user, max_new_tokens=config.REWRITE_MAX_TOKENS)
+        raw = self._gen.chat(_REWRITE_SYSTEM, user,
+                             max_new_tokens=config.REWRITE_MAX_TOKENS)
         return parse_rewrite(raw, shown)
 
     def repair(self, question: str, answer: str, passages: list, claims: list) -> dict:
@@ -148,10 +153,11 @@ class Repairer:
             rounds = r
             for c in todo:
                 query = self._subquery(question, c)
-                shown = add_passages(passages, self._retriever.retrieve(query, top_k=config.TOP_K))
+                found = self._retriever.retrieve(query, top_k=config.TOP_K)
+                shown = add_passages(passages, found)
                 step = {"round": r, "query": query, "passages": shown}
                 c["history"].append(step)
-                if not shown:                         # nothing retrieved: try again next round
+                if not shown:               # nothing retrieved: try again next round
                     continue
                 fixed = self._rewrite(question, c, passages, shown)
                 if fixed is None:
@@ -160,12 +166,13 @@ class Repairer:
                     continue
                 c["text"], c["citations"] = fixed
                 self._checker.verify_claims([c], passages)
-                step.update(rewrite=c["text"], supported=c["supported"], score=c["score"])
+                step.update(rewrite=c["text"], supported=c["supported"],
+                            score=c["score"])
                 if c["supported"]:
                     c["status"] = "repaired"
 
         for c in claims:
-            if c["status"] == "open":                 # still unsupported after the last round
+            if c["status"] == "open":   # still unsupported after the last round
                 c["status"] = "dropped"
 
         statuses = [c["status"] for c in claims]
