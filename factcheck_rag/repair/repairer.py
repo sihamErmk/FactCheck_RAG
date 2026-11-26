@@ -36,7 +36,7 @@ _REWRITE_SYSTEM = (
     "Output one sentence, or NONE, and nothing else."
 )
 
-# same wording the ALCE prompt asks for when the passages lack the answer
+# answer used when every claim was dropped
 NO_ANSWER = "The search results do not contain enough information to answer the question."
 
 
@@ -56,7 +56,7 @@ def parse_rewrite(raw: str, shown: list):
     cites every passage shown."""
     line = next((l.strip() for l in raw.splitlines() if l.strip()), "")
     line = re.sub(r"^(?:[-*•]|fixed claim:|claim:)\s*", "", line, flags=re.I).strip()
-    if line.upper().startswith("NONE"):
+    if line.rstrip(".").upper() == "NONE":   # "None of ..." is a real claim
         return None
     text = strip_citations(line)
     if len(text.split()) < 3:                     # same fragment rule as parse_claims

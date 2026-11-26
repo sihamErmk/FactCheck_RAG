@@ -17,6 +17,8 @@ def test_parse_subquery():
 def test_parse_rewrite():
     assert parse_rewrite("NONE", [6]) is None
     assert parse_rewrite("", [6]) is None
+    assert parse_rewrite("None of the Beatles wrote it [6].", [6]) == (
+        "None of the Beatles wrote it.", [6])
     assert parse_rewrite("Fixed claim: Armstrong landed in 1969 [7].", [6, 7]) == (
         "Armstrong landed in 1969.", [7])
     # citation of a passage that was not shown is ignored -> cite all shown
