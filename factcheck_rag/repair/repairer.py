@@ -69,9 +69,10 @@ def with_citations(text: str, cites: list) -> str:
     """'Armstrong walked first.' + [6] -> 'Armstrong walked first [6].' (ALCE style)."""
     if not cites:
         return text
-    body = text.rstrip()
-    end = body[-1] if body[-1:] in ("!", "?") else "."
-    return f"{body.rstrip('.!?').rstrip()} {''.join(f'[{c}]' for c in cites)}{end}"
+    text = text.rstrip()
+    end = text[-1] if text[-1:] in ("!", "?") else "."
+    tags = "".join(f"[{c}]" for c in cites)
+    return f"{text.rstrip('.!?').rstrip()} {tags}{end}"
 
 
 def add_passages(passages: list, new: list) -> list:
